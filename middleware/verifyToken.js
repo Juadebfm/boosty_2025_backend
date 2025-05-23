@@ -1,6 +1,7 @@
 const { clerkClient } = require("@clerk/backend");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const Investor = require("../models/Investor"); // Add this import
 
 //  Middleware that supports both Clerk and traditional JWT tokens
 const verifyToken = async (req, res, next) => {
@@ -36,11 +37,23 @@ const verifyToken = async (req, res, next) => {
 
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        user = await User.findById(decoded.id);
-        tokenType = "jwt";
 
-        if (user) {
-          console.log("✅ JWT token verified successfully");
+        // Check if it's an investor or user token
+        if (decoded.type === "investor") {
+          user = await Investor.findById(decoded.id);
+          tokenType = "jwt";
+
+          if (user) {
+            console.log("✅ JWT investor token verified successfully");
+          }
+        } else {
+          // Default to user lookup for backward compatibility
+          user = await User.findById(decoded.id);
+          tokenType = "jwt";
+
+          if (user) {
+            console.log("✅ JWT user token verified successfully");
+          }
         }
       } catch (jwtError) {
         console.log("❌ Both Clerk and JWT verification failed");
@@ -54,7 +67,7 @@ const verifyToken = async (req, res, next) => {
       }
     }
 
-    // Check if user exists in database
+    // Check if user/investor exists in database
     if (!user) {
       return res.status(404).json({
         message: "User not found in database",
@@ -62,6 +75,24 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
+    // Handle investor-specific logic
+    if (user.businessEmail) {
+      // This indicates it's an investor
+      // Attach investor info to request
+      req.user = {
+        id: user._id,
+        email: user.businessEmail,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isAdmin: user.isAdmin,
+        userType: "investor",
+        tokenType: tokenType,
+      };
+
+      return next();
+    }
+
+    // Handle user-specific logic (existing code)
     // Check if user account is active
     if (!user.isActive) {
       return res.status(403).json({ message: "Account is deactivated" });
@@ -92,6 +123,7 @@ const verifyToken = async (req, res, next) => {
       isAdmin: user.isAdmin,
       isVerified: user.isVerified,
       authMethod: user.authMethod,
+      userType: "user",
       tokenType: tokenType,
     };
 
@@ -105,7 +137,7 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-// Middleware specifically for traditional JWT tokens only
+// Rest of your middleware functions remain the same...
 const verifyTraditionalToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -153,7 +185,6 @@ const verifyTraditionalToken = async (req, res, next) => {
   }
 };
 
-// Middleware specifically for Clerk tokens only
 const verifyClerkToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -204,7 +235,7 @@ const verifyClerkToken = async (req, res, next) => {
   }
 };
 
-// Authorization middleware 
+// Authorization middleware
 const verifyTokenAndAuthorization = (req, res, next) => {
   verifyToken(req, res, () => {
     if (req.user.id.toString() === req.params.id || req.user.isAdmin) {
@@ -215,7 +246,7 @@ const verifyTokenAndAuthorization = (req, res, next) => {
   });
 };
 
-// Admin middleware 
+// Admin middleware
 const verifyTokenAndAdmin = (req, res, next) => {
   verifyToken(req, res, () => {
     if (req.user.isAdmin) {
@@ -228,7 +259,7 @@ const verifyTokenAndAdmin = (req, res, next) => {
   });
 };
 
-// Email verification middleware 
+// Email verification middleware
 const requireEmailVerification = (req, res, next) => {
   if (!req.user.isVerified) {
     return res.status(403).json({
@@ -247,9 +278,9 @@ const generateJWTToken = (userId) => {
 };
 
 module.exports = {
-  verifyToken, 
-  verifyTraditionalToken, 
-  verifyClerkToken, 
+  verifyToken,
+  verifyTraditionalToken,
+  verifyClerkToken,
   verifyTokenAndAuthorization,
   verifyTokenAndAdmin,
   requireEmailVerification,

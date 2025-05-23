@@ -4,6 +4,7 @@ const axios = require("axios");
 const {
   verifyToken,
   requireEmailVerification,
+  verifyTokenAndAdmin,
 } = require("../middleware/verifyToken");
 const User = require("../models/User");
 
@@ -13,6 +14,102 @@ const router = express.Router();
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+// Helper function to analyze usage patterns
+const analyzeUsagePattern = (dayHours, nightHours) => {
+  const totalHours = dayHours + nightHours;
+  const dayPercentage = ((dayHours / totalHours) * 100).toFixed(1);
+  const nightPercentage = ((nightHours / totalHours) * 100).toFixed(1);
+
+  let pattern = "Balanced";
+  if (dayHours > nightHours * 1.5) pattern = "Day-heavy";
+  else if (nightHours > dayHours * 1.5) pattern = "Night-heavy";
+
+  return {
+    pattern,
+    dayUsage: `${dayPercentage}%`,
+    nightUsage: `${nightPercentage}%`,
+    totalHours,
+    recommendation:
+      pattern === "Day-heavy"
+        ? "Smaller battery capacity needed"
+        : pattern === "Night-heavy"
+        ? "Larger battery capacity recommended"
+        : "Standard battery configuration suitable",
+  };
+};
+
+// Helper function to get climate optimizations
+const getClimateOptimizations = (location, solarData) => {
+  const optimizations = [];
+
+  if (solarData.humidity > 80) {
+    optimizations.push("Anti-corrosion coating recommended for high humidity");
+  }
+
+  if (solarData.cloudCover > 60) {
+    optimizations.push("Consider additional panels for frequent cloud cover");
+  }
+
+  if (location.city === "Lagos") {
+    optimizations.push(
+      "Marine-grade components recommended for coastal location"
+    );
+  }
+
+  if (solarData.averageSunlightHours < 6) {
+    optimizations.push("Enhanced battery storage for limited sunlight hours");
+  }
+
+  return optimizations.length > 0
+    ? optimizations
+    : ["Standard configuration suitable for location"];
+};
+
+// Helper function to save recommendation to user history
+const saveRecommendationToHistory = async (userId, recommendationData) => {
+  try {
+    const user = await User.findById(userId);
+    if (user) {
+      // Create history entry
+      const historyEntry = {
+        requestId: recommendationData.customerInfo.requestId,
+        totalWattage: recommendationData.powerRequirements.totalWattage,
+        dailyConsumption: recommendationData.powerRequirements.dailyConsumption,
+        appliances: recommendationData.powerRequirements.appliances,
+        location: {
+          city: recommendationData.locationProfile.location.city,
+          region: recommendationData.locationProfile.location.region,
+          country: recommendationData.locationProfile.location.country,
+        },
+        solarConditions: {
+          averageSunlightHours:
+            recommendationData.locationProfile.solarConditions
+              .averageSunlightHours,
+          cloudCover:
+            recommendationData.locationProfile.solarConditions.cloudCover,
+          humidity: recommendationData.locationProfile.solarConditions.humidity,
+        },
+        aiModel: recommendationData.metadata.aiModel,
+        processingTime: recommendationData.metadata.processingTime,
+        requestedAt: new Date(),
+      };
+
+      // Add to user's recommendation history (keep last 10 recommendations)
+      user.recommendationHistory.push(historyEntry);
+      if (user.recommendationHistory.length > 10) {
+        user.recommendationHistory.shift(); // Remove oldest if more than 10
+      }
+
+      await user.save();
+      console.log(
+        `💾 Recommendation saved for user: ${user.username} (Total: ${user.recommendationHistory.length})`
+      );
+    }
+  } catch (error) {
+    console.error("Failed to save recommendation history:", error);
+  }
+};
 
 // Get location data (you can use IP geolocation or user input)
 const getLocationData = async (req) => {
@@ -314,7 +411,7 @@ router.post("/", verifyToken, async (req, res) => {
       },
     };
 
-    // Save recommendation request to user's history 
+    // Save recommendation request to user's history (optional)
     await saveRecommendationToHistory(req.user.id, result);
 
     res.status(200).json(result);
@@ -349,7 +446,27 @@ router.post("/", verifyToken, async (req, res) => {
   }
 });
 
-// Fallback recommendation system (In case AI recommendation system fails)
+router.get("/debug/recommendations", verifyTokenAndAdmin, async (req, res) => {
+  try {
+    // Check what's actually in the database
+    const users = await User.find({}).select("username recommendationHistory");
+
+    const debug = {
+      totalUsers: await User.countDocuments(),
+      usersWithRecommendations: users.filter(
+        (u) => u.recommendationHistory && u.recommendationHistory.length > 0
+      ),
+      sampleUser: users[0],
+      recommendationHistoryLength: users[0]?.recommendationHistory?.length || 0,
+    };
+
+    res.json(debug);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Fallback recommendation system (your original logic)
 const generateFallbackRecommendations = (
   totalWattage,
   totalDayHours,

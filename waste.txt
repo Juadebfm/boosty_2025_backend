@@ -1,0 +1,97 @@
+// Generated Recommendations
+recommendations: [{
+  tier: {
+    type: String,
+    required: true,
+    enum: ['Basic Package', 'Standard Package', 'Premium Package', 'Enterprise Package']
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  
+  // Solar Equipment
+  panel: {
+    type: String,
+    required: true
+  },
+  panelQuantity: {
+    type: Number,
+    required: true
+  },
+  panelImage: String,
+  
+  // Power Equipment (Generator/Inverter)
+  powerEquipment: {
+    name: String,        // "generator" or "inverter"
+    type: String,        // "2.5kva pure sine wave solar generator"
+    quantity: Number,
+    warranty: String,
+    image: String
+  },
+  
+  // Battery System
+  battery: {
+    type: String,
+    capacity: String,    // "2.56kw lithium battery"
+    quantity: Number,
+    warranty: String,
+    image: String
+  },
+  
+  // Pricing
+  pricing: {
+    equipmentCost: {
+      type: Number,
+      required: true
+    },
+    installationCost: {
+      type: Number,
+      default: 0
+    },
+    vat: {
+      type: Number,
+      required: true
+    },
+    totalAmount: {
+      type: Number,
+      required: true
+    }
+  },
+  
+  // Performance Specs
+  performance: {
+    dailyConsumption: String,  // "132.06 kWh"
+    estimatedBackupHours: Number,
+    solarCoverage: String,     // "85% solar coverage"
+    paybackPeriod: String      // "3-4 years"
+  },
+  
+  // Benefits & Features
+  benefits: [String],
+  suitability: String,
+  locationBenefits: [String],
+  
+  // Technical Specs
+  technicalSpecs: {
+    totalSolarCapacity: String,    // "1.8kW"
+    batteryCapacity: String,       // "2.56kWh"
+    inverterCapacity: String,      // "2.5kVA"
+    expectedLifespan: String       // "15-20 years"
+  },
+  
+  // User Selection (if they choose this option)
+  isSelected: {
+    type: Boolean,
+    default: false
+  },
+  selectedAt: Date,
+  
+  // AI Confidence & Notes
+  aiConfidence: {
+    type: String,
+    enum: ['low', 'medium', 'high'],
+    default: 'high'
+  },
+  aiNotes: String
+}],

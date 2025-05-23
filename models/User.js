@@ -80,6 +80,46 @@ const UserSchema = new mongoose.Schema(
     lastLogin: {
       type: Date,
     },
+
+    recommendationCount: {
+      type: Number,
+      default: 0,
+    },
+    lastRecommendationAt: {
+      type: Date,
+    },
+
+    recommendationHistory: [
+      {
+        requestId: { type: String, required: true },
+        totalWattage: { type: Number, required: true },
+        dailyConsumption: { type: String, required: true },
+        appliances: [
+          {
+            nameOfItem: String,
+            quantity: Number,
+            wattage: Number,
+            dayHours: Number,
+            nightHours: Number,
+          },
+        ],
+        location: {
+          city: String,
+          region: String,
+          country: String,
+        },
+        solarConditions: {
+          averageSunlightHours: Number,
+          cloudCover: Number,
+          humidity: Number,
+        },
+        selectedRecommendation: String,
+        estimatedCost: Number,
+        aiModel: String,
+        processingTime: Number,
+        requestedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

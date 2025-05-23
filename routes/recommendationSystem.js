@@ -1,6 +1,11 @@
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
 const axios = require("axios");
+const {
+  verifyToken,
+  requireEmailVerification,
+} = require("../middleware/verifyToken");
+const User = require("../models/User");
 
 const router = express.Router();
 
@@ -104,8 +109,8 @@ const calculateSunlightHours = (latitude) => {
   return Math.max(5.0, Math.min(8.0, baseHours + latitudeFactor));
 };
 
-// Test route to verify Claude API is working
-router.get("/test", async (req, res) => {
+// Test route to verify Claude API is working (protected by hybrid auth)
+router.get("/test", verifyToken, async (req, res) => {
   try {
     const completion = await anthropic.messages.create({
       model: "claude-3-5-sonnet-20241022",
@@ -124,6 +129,14 @@ router.get("/test", async (req, res) => {
       message: "Claude AI connection successful!",
       response: completion.content[0].text,
       model: "claude-3-5-sonnet-20241022",
+      userInfo: {
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        authMethod: req.user.authMethod,
+        tokenType: req.user.tokenType,
+        isVerified: req.user.isVerified,
+      },
     });
   } catch (error) {
     res.status(500).json({
@@ -134,9 +147,11 @@ router.get("/test", async (req, res) => {
   }
 });
 
-// AI-powered recommendation route
-router.post("/", async (req, res) => {
+// AI-powered recommendation route (protected by hybrid auth)
+router.post("/", verifyToken, async (req, res) => {
   let items; // Declare items in the outer scope
+  const startTime = Date.now(); // Track processing time
+
   try {
     items = req.body.items; // Assign here
 
@@ -252,26 +267,55 @@ router.post("/", async (req, res) => {
     });
 
     // Parse Claude response
-    const aiResponse = JSON.parse(completion.content[0].text);
+    let aiResponse;
+    try {
+      const responseText = completion.content[0].text;
+      console.log("Claude raw response:", responseText); // Debug log
 
-    // Enhance with additional data
+      // Try to extract JSON if Claude added extra text
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const jsonString = jsonMatch ? jsonMatch[0] : responseText;
+
+      aiResponse = JSON.parse(jsonString);
+    } catch (parseError) {
+      console.error("JSON parsing failed:", parseError);
+      console.error("Raw Claude response:", completion.content[0].text);
+      throw new Error("Failed to parse Claude response as JSON");
+    }
+
+    // Enhance with additional data including user context
     const result = {
-      userProfile: {
+      customerInfo: {
+        userId: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        authMethod: req.user.authMethod,
+        isVerified: req.user.isVerified,
+        requestId: `REQ_${Date.now()}_${req.user.id.toString().slice(-6)}`,
+      },
+      locationProfile: {
         location: location,
         solarConditions: solarData,
-        powerRequirements: {
-          totalWattage,
-          dailyConsumption: dailyConsumption + " kWh",
-          appliances: items,
-        },
+        climateOptimizations: getClimateOptimizations(location, solarData),
+      },
+      powerRequirements: {
+        totalWattage,
+        dailyConsumption: dailyConsumption + " kWh",
+        appliances: items,
+        usagePattern: analyzeUsagePattern(totalDayHours, totalNightHours),
       },
       recommendations: aiResponse.recommendations,
       metadata: {
         generatedAt: new Date(),
         aiModel: "claude-3-5-sonnet",
         confidence: "high",
+        tokenType: req.user.tokenType,
+        processingTime: Date.now() - startTime,
       },
     };
+
+    // Save recommendation request to user's history 
+    await saveRecommendationToHistory(req.user.id, result);
 
     res.status(200).json(result);
   } catch (error) {
@@ -305,7 +349,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Fallback recommendation system (your original logic)
+// Fallback recommendation system (In case AI recommendation system fails)
 const generateFallbackRecommendations = (
   totalWattage,
   totalDayHours,

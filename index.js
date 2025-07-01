@@ -38,6 +38,9 @@ app.use(
     optionsSuccessStatus: 200,
   })
 );
+
+// Handle preflight requests explicitly
+app.options("*", cors());
 //Use the route
 app.use(express.json());
 app.use(clerkMiddleware());

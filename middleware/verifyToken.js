@@ -186,6 +186,11 @@ const verifyTraditionalToken = async (req, res, next) => {
 };
 
 const verifyClerkToken = async (req, res, next) => {
+  // Skip verification for OPTIONS requests (preflight)
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {

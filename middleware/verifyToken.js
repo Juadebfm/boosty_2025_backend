@@ -1,7 +1,11 @@
-const { clerkClient } = require("@clerk/backend");
+const { createClerkClient } = require("@clerk/backend");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const Investor = require("../models/Investor"); // Add this import
+const Investor = require("../models/Investor");
+
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY,
+});
 
 //  Middleware that supports both Clerk and traditional JWT tokens
 const verifyToken = async (req, res, next) => {
@@ -191,7 +195,7 @@ const verifyClerkToken = async (req, res, next) => {
     return next();
   }
 
-  // Get token from x-clerk-auth-token header instead of authorization
+  // Get token from x-clerk-auth-token header
   const clerkToken = req.headers["x-clerk-auth-token"];
 
   if (!clerkToken) {
@@ -199,9 +203,9 @@ const verifyClerkToken = async (req, res, next) => {
   }
 
   try {
+    // Now clerkClient should have verifyToken method
     const session = await clerkClient.verifyToken(clerkToken);
 
-    // Add req.user for the route to use
     req.user = {
       clerkId: session.sub,
       tokenType: "clerk",

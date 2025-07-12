@@ -191,52 +191,29 @@ const verifyClerkToken = async (req, res, next) => {
     return next();
   }
 
-  const authHeader = req.headers.authorization;
+  // Get token from x-clerk-auth-token header instead of authorization
+  const clerkToken = req.headers["x-clerk-auth-token"];
 
-  if (!authHeader) {
-    return res.status(401).json({ message: "You are not authenticated" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ message: "Access token is missing" });
+  if (!clerkToken) {
+    return res.status(401).json({ message: "Clerk token is missing" });
   }
 
   try {
-    const session = await clerkClient.verifyToken(token);
-    const user = await User.findOne({ clerkId: session.sub });
+    const session = await clerkClient.verifyToken(clerkToken);
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (!user.canUseClerkAuth()) {
-      return res
-        .status(403)
-        .json({ message: "User cannot use Clerk authentication" });
-    }
-
-    if (!user.isActive) {
-      return res.status(403).json({ message: "Account is deactivated" });
-    }
-
+    // Add req.user for the route to use
     req.user = {
-      id: user._id,
-      clerkId: user.clerkId,
-      email: user.email,
-      username: user.username,
-      isAdmin: user.isAdmin,
-      isVerified: user.isVerified,
-      authMethod: user.authMethod,
+      clerkId: session.sub,
       tokenType: "clerk",
     };
 
     next();
   } catch (error) {
-    return res
-      .status(403)
-      .json({ message: "Clerk token is invalid or has expired" });
+    console.error("Clerk token verification failed:", error);
+    return res.status(403).json({
+      message: "Clerk token is invalid or has expired",
+      error: error.message,
+    });
   }
 };
 

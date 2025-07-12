@@ -9,6 +9,7 @@ const {
   verifyTraditionalToken,
   generateJWTToken,
 } = require("../middleware/verifyToken");
+const { sendVerificationEmail } = require("../services/emailServices");
 
 const clerk = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
@@ -68,8 +69,14 @@ router.post("/register", async (req, res) => {
     // Generate JWT token
     const token = generateJWTToken(user._id);
 
-    // TODO: Send verification email here
-    // await sendVerificationEmail(user.email, emailVerificationToken);
+    // Send verification email here
+    try {
+      await sendVerificationEmail(user.email, emailVerificationToken);
+      console.log("Verification email sent to:", user.email);
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError);
+      // Don't fail registration if email fails
+    }
 
     res.status(201).json({
       success: true,
@@ -228,8 +235,15 @@ router.post(
       user.emailVerificationExpires = emailVerificationExpires;
       await user.save();
 
-      // TODO: Send verification email
-      // await sendVerificationEmail(user.email, emailVerificationToken);
+      // Send verification email
+      try {
+        await sendVerificationEmail(user.email, emailVerificationToken);
+      } catch (emailError) {
+        console.error("Email sending failed:", emailError);
+        return res
+          .status(500)
+          .json({ error: "Failed to send verification email" });
+      }
 
       res.status(200).json({
         success: true,

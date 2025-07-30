@@ -17,6 +17,7 @@ const orderRoute = require("./routes/order");
 const investorRoute = require("./routes/investor");
 const partnerRoute = require("./routes/partner");
 const recommendationRoute = require("./routes/recommendationSystem");
+const ttsRoutes = require("./routes/tts");
 
 // connect our code to the database (MongoDB)
 mongoose
@@ -54,6 +55,7 @@ app.use("/api/order", orderRoute);
 app.use("/api/investor", investorRoute);
 app.use("/api/partner", partnerRoute);
 app.use("/api/recommendations", recommendationRoute);
+app.use("/api/tts", ttsRoutes);
 
 const PORT = process.env.PORT || 3001;
 

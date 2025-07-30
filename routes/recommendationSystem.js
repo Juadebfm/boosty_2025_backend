@@ -66,51 +66,6 @@ const getClimateOptimizations = (location, solarData) => {
     : ["Standard configuration suitable for location"];
 };
 
-// Helper function to save recommendation to user history
-const saveRecommendationToHistory = async (userId, recommendationData) => {
-  try {
-    const user = await User.findById(userId);
-    if (user) {
-      // Create history entry
-      const historyEntry = {
-        requestId: recommendationData.customerInfo.requestId,
-        totalWattage: recommendationData.powerRequirements.totalWattage,
-        dailyConsumption: recommendationData.powerRequirements.dailyConsumption,
-        appliances: recommendationData.powerRequirements.appliances,
-        location: {
-          city: recommendationData.locationProfile.location.city,
-          region: recommendationData.locationProfile.location.region,
-          country: recommendationData.locationProfile.location.country,
-        },
-        solarConditions: {
-          averageSunlightHours:
-            recommendationData.locationProfile.solarConditions
-              .averageSunlightHours,
-          cloudCover:
-            recommendationData.locationProfile.solarConditions.cloudCover,
-          humidity: recommendationData.locationProfile.solarConditions.humidity,
-        },
-        aiModel: recommendationData.metadata.aiModel,
-        processingTime: recommendationData.metadata.processingTime,
-        requestedAt: new Date(),
-      };
-
-      // Add to user's recommendation history (keep last 10 recommendations)
-      user.recommendationHistory.push(historyEntry);
-      if (user.recommendationHistory.length > 10) {
-        user.recommendationHistory.shift(); // Remove oldest if more than 10
-      }
-
-      await user.save();
-      console.log(
-        `💾 Recommendation saved for user: ${user.username} (Total: ${user.recommendationHistory.length})`
-      );
-    }
-  } catch (error) {
-    console.error("Failed to save recommendation history:", error);
-  }
-};
-
 // Get location data (you can use IP geolocation or user input)
 const getLocationData = async (req) => {
   try {
@@ -244,17 +199,19 @@ router.get("/test", verifyToken, async (req, res) => {
   }
 });
 
-// AI-powered recommendation route (protected by hybrid auth)
-router.post("/", verifyToken, async (req, res) => {
-  let items; // Declare items in the outer scope
-  const startTime = Date.now(); // Track processing time
+// AI-powered recommendation route - SINGLE OPTIMAL RECOMMENDATION WITH REAL PRODUCT IMAGES
+router.post("/", async (req, res) => {
+  const startTime = Date.now();
 
   try {
-    items = req.body.items; // Assign here
+    let items = req.body.items;
 
     // Validate input
     if (!items || (Array.isArray(items) && items.length === 0)) {
-      return res.status(400).json({ message: "Items are required" });
+      return res.status(400).json({
+        success: false,
+        message: "Items are required",
+      });
     }
 
     if (!Array.isArray(items)) {
@@ -271,6 +228,7 @@ router.post("/", verifyToken, async (req, res) => {
         !item.nightHours
       ) {
         return res.status(400).json({
+          success: false,
           message:
             "Each item must have nameOfItem, quantity, wattage, dayHours, and nightHours",
         });
@@ -299,10 +257,10 @@ router.post("/", verifyToken, async (req, res) => {
       1000
     ).toFixed(2);
 
-    // Create Claude AI prompt
-    const prompt = `You are an expert solar energy consultant for Nigeria with deep knowledge of solar installations in Nigeria and West Africa. Always return valid JSON.
+    // Create Claude AI prompt for SINGLE OPTIMAL recommendation with real product images
+    const prompt = `You are an expert solar energy consultant for Nigeria with deep knowledge of solar installations and current market products. Always return valid JSON.
 
-    Based on the following information, provide exactly 3 solar system recommendations:
+    Based on the following information, provide EXACTLY 1 OPTIMAL solar system recommendation with REAL product images:
 
     LOCATION: ${location.city}, ${location.region}, ${location.country}
     SOLAR CONDITIONS: ${
@@ -323,38 +281,84 @@ router.post("/", verifyToken, async (req, res) => {
       )
       .join("\n")}
 
-    Please provide exactly 3 recommendations (Basic, Standard, Premium) in this exact JSON format:
+    REQUIREMENTS:
+    1. Recommend the SINGLE MOST OPTIMAL system (not multiple options)
+    2. Use SPECIFIC brand names and models available in Nigeria (e.g., "Luminous 5KVA Inverter", "Trojan 200Ah Battery", "Canadian Solar 450W Panel")
+    3. Include REAL product image URLs from manufacturer websites or trusted Nigerian retailers
+    4. Calculate accurate pricing for Nigerian market (2024/2025 prices)
+    5. Consider the climate conditions in ${location.city}
+
+    Return response in this EXACT JSON format:
     {
-      "recommendations": [
-        {
-          "option": "Basic Package",
-          "panel": "450w monocrystalline solar panel",
-          "panelQuantity": 4,
-          "panelImage": "https://images.pexels.com/photos/159243/solar-solar-cells-photovoltaic-environmentally-friendly-159243.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-          "generator": "2.5kva pure sine wave solar generator",
-          "generatorQuantity": 1,
-          "generatorWarranty": "2 years warranty",
-          "battery": "2.56kw lithium battery",
-          "batteryQuantity": 1,
-          "batteryImage": "https://media.istockphoto.com/id/1620576275/photo/close-up-view-of-home-battery-storage-system-on-building-facade.jpg?b=1&s=612x612&w=0&k=20&c=L5C8M4hfXLt_OscTaK_KnhY_GHXrIGGVvkMB3D6KS04=",
-          "batteryWarranty": "10 years warranty",
-          "amount": 3108000,
-          "vat": 233100,
-          "totalAmount": 3341100,
-          "dailyConsumption": "${dailyConsumption} kWh"
+      "recommendation": {
+        "systemName": "Optimal Solar System for Your Needs",
+        "components": {
+          "inverter": {
+            "name": "Specific Brand Model (e.g., Luminous 5KVA Pure Sine Wave Inverter)",
+            "quantity": 1,
+            "warranty": "2 years warranty",
+            "imageUrl": "REAL_PRODUCT_IMAGE_URL_HERE"
+          },
+          "battery": {
+            "name": "Specific Brand Model (e.g., Trojan T-105 Deep Cycle Battery 225Ah)",
+            "quantity": 4,
+            "warranty": "5 years warranty", 
+            "imageUrl": "REAL_PRODUCT_IMAGE_URL_HERE"
+          },
+          "solarPanels": {
+            "name": "Specific Brand Model (e.g., Canadian Solar 450W Monocrystalline Panel)",
+            "quantity": 8,
+            "warranty": "25 years warranty",
+            "imageUrl": "REAL_PRODUCT_IMAGE_URL_HERE"
+          }
+        },
+        "pricing": {
+          "subtotal": 4500000,
+          "vat": 337500,
+          "totalAmount": 4837500,
+          "currency": "NGN"
+        },
+        "performance": {
+          "dailyConsumption": "${dailyConsumption} kWh",
+          "backupDuration": "12-16 hours",
+          "efficiency": "95%"
+        },
+        "suitability": {
+          "reason": "This system is optimal because it perfectly matches your ${dailyConsumption} kWh daily consumption with optimal component sizing",
+          "climateConsiderations": ["Suitable for ${
+            location.city
+          } humidity levels", "Handles ${
+      solarData.cloudCover
+    }% cloud cover efficiently"]
         }
-      ]
+      }
     }
 
-    Adjust quantities, capacities, and prices based on the power requirements and location factors like humidity and cloud cover in ${
-      location.city
-    }.`;
+    IMPORTANT: 
+    - Find REAL product images from manufacturer websites or trusted Nigerian solar retailers
+    - Use current Nigerian market prices (not outdated prices)
+    - Ensure the system can handle the calculated ${dailyConsumption} kWh daily consumption
+    - Consider ${location.city}'s ${
+      solarData.cloudCover
+    }% cloud cover and humidity levels
+    - NO fallback options - this is the SINGLE best recommendation`;
+
+    console.log("ANTHROPIC_API_KEY exists:", !!process.env.ANTHROPIC_API_KEY);
+    console.log(
+      "API key starts with sk-ant:",
+      process.env.ANTHROPIC_API_KEY?.startsWith("sk-ant-")
+    );
+    console.log("API key length:", process.env.ANTHROPIC_API_KEY?.length);
+    console.log(
+      "First 20 chars:",
+      process.env.ANTHROPIC_API_KEY?.substring(0, 20)
+    );
 
     // Get Claude AI recommendations
     const completion = await anthropic.messages.create({
       model: "claude-3-5-sonnet-20241022",
       max_tokens: 2000,
-      temperature: 0.7,
+      temperature: 0.3, // Lower temperature for more consistent recommendations
       messages: [
         {
           role: "user",
@@ -367,29 +371,58 @@ router.post("/", verifyToken, async (req, res) => {
     let aiResponse;
     try {
       const responseText = completion.content[0].text;
-      console.log("Claude raw response:", responseText); // Debug log
+      console.log("Claude raw response:", responseText);
 
       // Try to extract JSON if Claude added extra text
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       const jsonString = jsonMatch ? jsonMatch[0] : responseText;
 
       aiResponse = JSON.parse(jsonString);
+
+      // Validate that we got the expected structure
+      if (!aiResponse.recommendation || !aiResponse.recommendation.components) {
+        throw new Error("Invalid AI response structure");
+      }
     } catch (parseError) {
       console.error("JSON parsing failed:", parseError);
       console.error("Raw Claude response:", completion.content[0].text);
-      throw new Error("Failed to parse Claude response as JSON");
+
+      // Return error instead of fallback
+      return res.status(503).json({
+        success: false,
+        message: "Unable to generate recommendations at this time",
+        error: "AI service parsing error",
+        suggestion: "Please try again in a few moments",
+        canRetry: true,
+      });
     }
 
-    // Enhance with additional data including user context
+    // Determine if user is authenticated (without requiring it)
+    const isAuthenticated = req.user && req.user.id;
+
+    // Build customer info based on authentication status
+    const customerInfo = isAuthenticated
+      ? {
+          userId: req.user.id,
+          username: req.user.username,
+          email: req.user.email,
+          authMethod: req.user.authMethod,
+          isVerified: req.user.isVerified,
+          requestId: `REQ_${Date.now()}_${req.user.id.toString().slice(-6)}`,
+        }
+      : {
+          userId: null,
+          username: "Anonymous User",
+          email: null,
+          authMethod: "none",
+          isVerified: false,
+          requestId: `REQ_${Date.now()}_ANON`,
+        };
+
+    // Build the final response
     const result = {
-      customerInfo: {
-        userId: req.user.id,
-        username: req.user.username,
-        email: req.user.email,
-        authMethod: req.user.authMethod,
-        isVerified: req.user.isVerified,
-        requestId: `REQ_${Date.now()}_${req.user.id.toString().slice(-6)}`,
-      },
+      success: true,
+      customerInfo,
       locationProfile: {
         location: location,
         solarConditions: solarData,
@@ -401,50 +434,110 @@ router.post("/", verifyToken, async (req, res) => {
         appliances: items,
         usagePattern: analyzeUsagePattern(totalDayHours, totalNightHours),
       },
-      recommendations: aiResponse.recommendations,
+      recommendation: aiResponse.recommendation,
       metadata: {
         generatedAt: new Date(),
         aiModel: "claude-3-5-sonnet",
         confidence: "high",
-        tokenType: req.user.tokenType,
+        tokenType: isAuthenticated ? req.user.tokenType : "anonymous",
         processingTime: Date.now() - startTime,
       },
     };
 
-    // Save recommendation request to user's history (optional)
-    await saveRecommendationToHistory(req.user.id, result);
+    // Save recommendation request to user's history (only if authenticated)
+    if (isAuthenticated) {
+      try {
+        await saveRecommendationToHistory(req.user.id, result);
+        console.log(`💾 Recommendation saved for user: ${req.user.username}`);
+      } catch (historyError) {
+        console.error("Failed to save recommendation history:", historyError);
+        // Don't fail the request if history saving fails
+      }
+    } else {
+      console.log("📝 Anonymous user - skipping history save");
+    }
 
     res.status(200).json(result);
   } catch (error) {
     console.error("AI recommendation error:", error);
 
-    // Fallback to hardcoded system
-    const totalWattage = items.reduce(
-      (sum, item) => sum + Number(item.wattage) * Number(item.quantity),
-      0
-    );
-    const totalDayHours = items.reduce(
-      (sum, item) => sum + Number(item.dayHours),
-      0
-    );
-    const totalNightHours = items.reduce(
-      (sum, item) => sum + Number(item.nightHours),
-      0
-    );
-
-    const fallbackRecommendations = generateFallbackRecommendations(
-      totalWattage,
-      totalDayHours,
-      totalNightHours
-    );
-
-    res.status(200).json({
-      recommendations: fallbackRecommendations,
-      note: "Using fallback recommendations. AI system temporarily unavailable.",
-      totalWattage,
+    return res.status(503).json({
+      success: false,
+      message: "Recommendation service is temporarily unavailable",
+      error: error.message,
+      suggestion:
+        "Please try again in a few moments. Our AI system will be back online shortly.",
+      canRetry: true,
+      supportContact: "If the issue persists, please contact our support team",
     });
   }
 });
+
+// Updated helper function to save recommendation to user history
+const saveRecommendationToHistory = async (userId, recommendationData) => {
+  if (!userId) {
+    console.log("📝 No userId provided - skipping history save");
+    return;
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      console.log(`⚠️ User not found: ${userId}`);
+      return;
+    }
+
+    // Create history entry for single recommendation structure
+    const historyEntry = {
+      requestId: recommendationData.customerInfo.requestId,
+      totalWattage: recommendationData.powerRequirements.totalWattage,
+      dailyConsumption: recommendationData.powerRequirements.dailyConsumption,
+      appliances: recommendationData.powerRequirements.appliances,
+      location: {
+        city: recommendationData.locationProfile.location.city,
+        region: recommendationData.locationProfile.location.region,
+        country: recommendationData.locationProfile.location.country,
+      },
+      solarConditions: {
+        averageSunlightHours:
+          recommendationData.locationProfile.solarConditions
+            .averageSunlightHours,
+        cloudCover:
+          recommendationData.locationProfile.solarConditions.cloudCover,
+        humidity: recommendationData.locationProfile.solarConditions.humidity,
+      },
+      recommendedSystem: {
+        systemName: recommendationData.recommendation.systemName,
+        totalAmount: recommendationData.recommendation.pricing.totalAmount,
+        components: recommendationData.recommendation.components,
+        performance: recommendationData.recommendation.performance,
+      },
+      aiModel: recommendationData.metadata.aiModel,
+      processingTime: recommendationData.metadata.processingTime,
+      requestedAt: new Date(),
+    };
+
+    // Initialize recommendationHistory if it doesn't exist
+    if (!user.recommendationHistory) {
+      user.recommendationHistory = [];
+    }
+
+    // Add to user's recommendation history (keep last 10 recommendations)
+    user.recommendationHistory.push(historyEntry);
+    if (user.recommendationHistory.length > 10) {
+      user.recommendationHistory.shift(); // Remove oldest if more than 10
+    }
+
+    await user.save();
+    console.log(
+      `💾 Recommendation saved for user: ${user.username} (Total: ${user.recommendationHistory.length})`
+    );
+  } catch (error) {
+    console.error("Failed to save recommendation history:", error);
+    // Don't throw error - this shouldn't break the main flow
+    throw error; // Re-throw so calling function can handle it
+  }
+};
 
 router.get("/debug/recommendations", verifyTokenAndAdmin, async (req, res) => {
   try {
@@ -465,112 +558,5 @@ router.get("/debug/recommendations", verifyTokenAndAdmin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-// Fallback recommendation system (your original logic)
-const generateFallbackRecommendations = (
-  totalWattage,
-  totalDayHours,
-  totalNightHours
-) => {
-  const recommendations = [];
-
-  if (totalWattage >= 0 && totalWattage <= 3125) {
-    recommendations.push({
-      option: "Basic Package",
-      panel: "450w monocrystalline solar panel",
-      panelQuantity: 4,
-      panelImage:
-        "https://images.pexels.com/photos/159243/solar-solar-cells-photovoltaic-environmentally-friendly-159243.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      generator: "2.5kva pure sine wave solar generator",
-      generatorQuantity: 1,
-      generatorWarranty: "2 years warranty",
-      battery: "2.56kw lithium battery",
-      batteryQuantity: 1,
-      batteryImage:
-        "https://media.istockphoto.com/id/1620576275/photo/close-up-view-of-home-battery-storage-system-on-building-facade.jpg?b=1&s=612x612&w=0&k=20&c=L5C8M4hfXLt_OscTaK_KnhY_GHXrIGGVvkMB3D6KS04=",
-      batteryWarranty: "10 years warranty",
-      amount: 3108000,
-      vat: 233100,
-      totalAmount: 3341100,
-      dailyConsumption:
-        ((totalWattage * (totalDayHours + totalNightHours)) / 1000).toFixed(2) +
-        " kWh",
-    });
-  }
-
-  if (totalWattage >= 3126 && totalWattage <= 3750) {
-    recommendations.push({
-      option: "Standard Package",
-      panel: "450w monocrystalline solar panel",
-      panelQuantity: 8,
-      panelImage:
-        "https://images.pexels.com/photos/159243/solar-solar-cells-photovoltaic-environmentally-friendly-159243.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      inverter: "3kva pure sine wave hybrid inverter",
-      inverterQuantity: 1,
-      inverterWarranty: "2 years warranty",
-      battery: "5kw lithium battery",
-      batteryQuantity: 1,
-      batteryImage:
-        "https://media.istockphoto.com/id/1620576275/photo/close-up-view-of-home-battery-storage-system-on-building-facade.jpg?b=1&s=612x612&w=0&k=20&c=L5C8M4hfXLt_OscTaK_KnhY_GHXrIGGVvkMB3D6KS04=",
-      batteryWarranty: "10 years warranty",
-      amount: 5352000,
-      vat: 401400,
-      totalAmount: 5753400,
-      dailyConsumption:
-        ((totalWattage * (totalDayHours + totalNightHours)) / 1000).toFixed(2) +
-        " kWh",
-    });
-  }
-
-  if (totalWattage >= 3751 && totalWattage <= 6250) {
-    recommendations.push({
-      option: "Premium Package",
-      panel: "450w monocrystalline solar panel",
-      panelQuantity: 10,
-      panelImage:
-        "https://images.pexels.com/photos/159243/solar-solar-cells-photovoltaic-environmentally-friendly-159243.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      inverter: "5kva pure sine wave hybrid inverter",
-      inverterQuantity: 1,
-      inverterWarranty: "2 years warranty",
-      battery: "5kw lithium battery",
-      batteryQuantity: 1,
-      batteryImage:
-        "https://media.istockphoto.com/id/1620576275/photo/close-up-view-of-home-battery-storage-system-on-building-facade.jpg?b=1&s=612x612&w=0&k=20&c=L5C8M4hfXLt_OscTaK_KnhY_GHXrIGGVvkMB3D6KS04=",
-      batteryWarranty: "10 years warranty",
-      amount: 6180000,
-      vat: 463500,
-      totalAmount: 6643500,
-      dailyConsumption:
-        ((totalWattage * (totalDayHours + totalNightHours)) / 1000).toFixed(2) +
-        " kWh",
-    });
-  }
-
-  if (totalWattage >= 6251 && totalWattage <= 12500) {
-    recommendations.push({
-      option: "Enterprise Package",
-      panel: "450w monocrystalline solar panel",
-      panelQuantity: 20,
-      panelImage:
-        "https://images.pexels.com/photos/159243/solar-solar-cells-photovoltaic-environmentally-friendly-159243.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      inverter: "10kva pure sine wave hybrid inverter",
-      inverterQuantity: 1,
-      inverterWarranty: "2 years warranty",
-      battery: "16kw lithium battery",
-      batteryQuantity: 1,
-      batteryImage:
-        "https://media.istockphoto.com/id/1620576275/photo/close-up-view-of-home-battery-storage-system-on-building-facade.jpg?b=1&s=612x612&w=0&k=20&c=L5C8M4hfXLt_OscTaK_KnhY_GHXrIGGVvkMB3D6KS04=",
-      batteryWarranty: "10 years warranty",
-      amount: 13980000,
-      vat: 1048500,
-      totalAmount: 15028500,
-      dailyConsumption:
-        ((totalWattage * (totalDayHours + totalNightHours)) / 1000).toFixed(2) +
-        " kWh",
-    });
-  }
-
-  return recommendations;
-};
 
 module.exports = router;

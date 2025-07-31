@@ -194,48 +194,62 @@ const verifyClerkToken = async (req, res, next) => {
     return next();
   }
 
-  const clerkToken = req.headers["x-clerk-auth-token"];
+  const clerkToken = req.headers['x-clerk-auth-token'];
 
   if (!clerkToken) {
     return res.status(401).json({ message: "Clerk token is missing" });
   }
 
   try {
-    // Method 1: Try verifySession first (most likely to work)
     let result;
+    
+    // Method 1: Try verifySession first
     try {
       result = await clerkClient.verifySession(clerkToken);
       console.log("✅ Used verifySession method");
+      console.log("🔍 verifySession result:", JSON.stringify(result, null, 2));
     } catch (sessionError) {
       // Method 2: Try using the sessions namespace
       try {
         result = await clerkClient.sessions.verifySession(clerkToken);
         console.log("✅ Used sessions.verifySession method");
+        console.log("🔍 sessions.verifySession result:", JSON.stringify(result, null, 2));
       } catch (sessionsError) {
         // Method 3: Try JWT verification approach
-        const { verifyToken } = require("@clerk/backend");
+        const { verifyToken } = require('@clerk/backend');
         result = await verifyToken(clerkToken, {
-          secretKey: process.env.CLERK_SECRET_KEY,
+          secretKey: process.env.CLERK_SECRET_KEY
         });
         console.log("✅ Used standalone verifyToken method");
+        console.log("🔍 standalone verifyToken result:", JSON.stringify(result, null, 2));
       }
     }
-
-    if (!result || !result.userId) {
-      throw new Error("Invalid token - no userId found");
+    
+    // 🔍 DEBUG: Log the entire result to see its structure
+    console.log("🔍 Full verification result:", result);
+    console.log("🔍 Available properties:", Object.keys(result || {}));
+    
+    // Try different property names for userId
+    const userId = result.userId || result.sub || result.user_id || result.id;
+    
+    if (!userId) {
+      console.log("❌ No userId found in any expected property");
+      throw new Error("Invalid token - no userId found in result");
     }
-
+    
+    console.log("✅ Found userId:", userId);
+    
     req.user = {
-      clerkId: result.userId,
-      tokenType: "clerk",
+      clerkId: userId,
+      tokenType: "clerk"
     };
 
     next();
   } catch (error) {
     console.error("Clerk token verification failed:", error);
-    return res.status(403).json({
+    return res.status(403).json({ 
       message: "Clerk token is invalid or has expired",
-      error: error.message,
+      error: error.message 
     });
   }
 };

@@ -194,31 +194,31 @@ const verifyClerkToken = async (req, res, next) => {
     return next();
   }
 
-  const clerkToken = req.headers['x-clerk-auth-token'];
+  const clerkToken = req.headers["x-clerk-auth-token"];
 
   if (!clerkToken) {
     return res.status(401).json({ message: "Clerk token is missing" });
   }
 
   try {
-    // For @clerk/backend v1.23.11, use this method:
-    const session = await clerkClient.sessions.verifyToken(clerkToken);
-    
-    if (!session) {
-      throw new Error("Invalid session");
+    // ✅ CORRECT METHOD - Use verifyToken directly on clerkClient
+    const { userId } = await clerkClient.verifyToken(clerkToken);
+
+    if (!userId) {
+      throw new Error("Invalid token - no userId found");
     }
-    
+
     req.user = {
-      clerkId: session.userId,
-      tokenType: "clerk"
+      clerkId: userId,
+      tokenType: "clerk",
     };
 
     next();
   } catch (error) {
     console.error("Clerk token verification failed:", error);
-    return res.status(403).json({ 
+    return res.status(403).json({
       message: "Clerk token is invalid or has expired",
-      error: error.message 
+      error: error.message,
     });
   }
 };

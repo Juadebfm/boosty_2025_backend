@@ -201,15 +201,32 @@ const verifyClerkToken = async (req, res, next) => {
   }
 
   try {
-    // ✅ CORRECT METHOD - Use verifyToken directly on clerkClient
-    const { userId } = await clerkClient.verifyToken(clerkToken);
+    // Method 1: Try verifySession first (most likely to work)
+    let result;
+    try {
+      result = await clerkClient.verifySession(clerkToken);
+      console.log("✅ Used verifySession method");
+    } catch (sessionError) {
+      // Method 2: Try using the sessions namespace
+      try {
+        result = await clerkClient.sessions.verifySession(clerkToken);
+        console.log("✅ Used sessions.verifySession method");
+      } catch (sessionsError) {
+        // Method 3: Try JWT verification approach
+        const { verifyToken } = require("@clerk/backend");
+        result = await verifyToken(clerkToken, {
+          secretKey: process.env.CLERK_SECRET_KEY,
+        });
+        console.log("✅ Used standalone verifyToken method");
+      }
+    }
 
-    if (!userId) {
+    if (!result || !result.userId) {
       throw new Error("Invalid token - no userId found");
     }
 
     req.user = {
-      clerkId: userId,
+      clerkId: result.userId,
       tokenType: "clerk",
     };
 

@@ -17,6 +17,11 @@ const orderRoute = require("./routes/order");
 const investorRoute = require("./routes/investor");
 const partnerRoute = require("./routes/partner");
 const recommendationRoute = require("./routes/recommendationSystem");
+console.log("recommendationRoute type:", typeof recommendationRoute);
+console.log(
+  "recommendationRoute has router methods:",
+  !!recommendationRoute.get
+);
 const ttsRoutes = require("./routes/tts");
 
 // connect our code to the database (MongoDB)

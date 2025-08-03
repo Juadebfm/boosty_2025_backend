@@ -1006,7 +1006,7 @@ router.put("/user/address", verifyToken, async (req, res) => {
 });
 
 // NEW: Get user's current address
-router.get("/user/address", verifyToken, async (req, res) => {
+router.get("/user/address", async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("address");
 
@@ -1103,6 +1103,10 @@ router.get("/debug/recommendations", verifyTokenAndAdmin, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+router.get("/user/address/test", async (req, res) => {
+  res.json({ message: "Route is working without auth" });
 });
 
 module.exports = router;
